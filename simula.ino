@@ -1,4 +1,6 @@
-* Risponde al comando "?" con stato Idle
+/*
+ * Simulatore GRBL 1.1h per LaserGRBL
+ * Risponde al comando "?" con stato Idle
  * Compatibile con protocollo LaserGRBL
  */
 
@@ -12,15 +14,17 @@ void setup() {
 
 void loop() {
   if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim();
+    char c = Serial.read();
     
-    if (cmd[0] == '?') {
+    if (c == '?') {
       // Risposta di stato per LaserGRBL
-      Serial.print("<Idle|MPos:0.000,0.000,0.000|FS:0,0>");
-      Serial.write('\n');
+      Serial.println("<Idle|MPos:0.000,0.000,0.000|FS:0,0>");
+      return;
     }
-    else if (cmd == "$") {
+    else {
+      String cmd = Serial.readStringUntil('\n');
+      cmd.trim();
+      if (cmd == "$$") {
       // Comandi settings
       Serial.print("$0=10");
       Serial.write('\n');
@@ -114,7 +118,9 @@ void loop() {
       Serial.print("ok");
       Serial.write('\n');
     }
+    }
   }
   delay(1);
 }
+
 
