@@ -29,7 +29,20 @@ RESET:
 loop:	
         cpi r22,1
         breq loop
-        sts UDR0,r16
+; Invia primo byte
+WAIT_TX1:
+    lds r17, 0xC0      ; UCSR0A
+    sbrc r17, 5         ; salta se UDRE0=1
+    rjmp WAIT_TX1
+    sts UDR0, r16
+
+; Invia secondo byte
+ldi r16, 10
+WAIT_TX2:
+    lds r17, 0xC0      ; UCSR0A
+    sbrc r17, 5
+    rjmp WAIT_TX2
+    sts UDR0, r16
         ldi r22,1
 	rjmp loop
 receive:
