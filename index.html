@@ -86,8 +86,8 @@ void loop() {
 
 <h3>3. Final Behavior</h3>
 <ul>
-    <li>Sending <code>?</code> → LaserGRBL receives the status immediately.</li>
-    <li>Sending G-code (e.g., <code>G0 X10 Y10</code>) → LaserGRBL receives <code>ok</code>.</li>
+    <li>LaserGRBL sending <code>?</code> → and grbl need send the status immediately.</li>
+    <li>LaserGRBL send G-code (e.g., <code>G0 X10 Y10</code>) → grbl receives code and rispond <code>ok</code>.</li>
     <li>No <code>\n</code> is required after <code>?</code> because the code reads only that single character.</li>
 </ul>
 
