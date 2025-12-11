@@ -1,0 +1,105 @@
+;------------------------------------------
+; Fake GRBL Minimal – LaserGRBL Compatible
+; Arduino Nano / ATmega328P
+; 115200 baud – F_CPU=16MHz
+;------------------------------------------
+
+.org 0x0000
+rjmp RESET                                      ; start
+
+.org 0x60
+RESET:
+    ldi r16, 0b00000000                         ; UBRR0H=0
+    sts 0xC5, r16                               ; UBRR0H @0xC5
+    ldi r16, 0b00001000                         ; UBRR0L=8
+    sts 0xC4, r16                               ; UBRR0L @0xC4
+
+    ldi r16, 0b00011000                         ; RXEN0(bit4)+TXEN0(bit3)
+    sts 0xC1, r16                               ; UCSR0B @0xC1
+
+    ldi r16, 0b00000110                         ; UCSZ01(bit2)+UCSZ00(bit1)
+    sts 0xC2, r16                               ; UCSR0C @0xC2
+
+    ldi r30, low(STARTUP_MESSAGE*2)             ; Z → startup msg
+    ldi r31, high(STARTUP_MESSAGE*2)
+
+SEND_STARTUP_LOOP:
+    lpm r16, Z+                                 ; read FLASH
+    cpi r16, 0
+    breq MAIN_LOOP                              ; end string
+
+WAIT_TX_STARTUP:
+    lds r17, 0xC0                               ; UCSR0A
+    sbrs r17, 5                                 ; UDRE0
+    rjmp WAIT_TX_STARTUP
+    sts 0xC6, r16                               ; UDR0
+    rjmp SEND_STARTUP_LOOP
+
+;------------------------------------------
+; MAIN LOOP
+;------------------------------------------
+MAIN_LOOP:
+WAIT_RX:
+    lds r16, 0xC0                               ; UCSR0A
+    sbrc r16, 7                                 ; RXC0
+    rjmp GOT_RX
+    rjmp WAIT_RX
+
+GOT_RX:
+    lds r16, 0xC6                               ; read byte
+
+    cpi r16, '?'                                ; '?' → status
+    breq SEND_STATUS
+
+    cpi r16, 0x0A                               ; '\n' → ok
+    breq SEND_OK
+
+    rjmp SEND_OK                                ; any other command → ok
+
+;------------------------------------------
+; STATUS
+;------------------------------------------
+SEND_STATUS:
+    ldi r30, low(MSG_STATUS*2)
+    ldi r31, high(MSG_STATUS*2)
+
+SEND_STATUS_LOOP:
+    lpm r16, Z+
+    cpi r16, 0
+    breq MAIN_LOOP
+
+WAIT_TX_STATUS:
+    lds r17, 0xC0                               ; UCSR0A
+    sbrs r17, 5                                 ; UDRE0
+    rjmp WAIT_TX_STATUS
+    sts 0xC6, r16
+    rjmp SEND_STATUS_LOOP
+
+;------------------------------------------
+; OK
+;------------------------------------------
+SEND_OK:
+    ldi r30, low(MSG_OK*2)
+    ldi r31, high(MSG_OK*2)
+
+SEND_OK_LOOP:
+    lpm r16, Z+
+    cpi r16, 0
+    breq MAIN_LOOP
+
+WAIT_TX_OK:
+    lds r17, 0xC0                               ; UCSR0A
+    sbrs r17, 5                                 ; UDRE0
+    rjmp WAIT_TX_OK
+    sts 0xC6, r16
+    rjmp SEND_OK_LOOP
+
+;------------------------------------------
+; STRINGS IN FLASH
+;------------------------------------------
+MSG_STATUS:
+    .db "<Idle|MPos:0.000,0.000,0.000|FS:0,0>",10,0
+MSG_OK:
+    .db "ok",10,0
+STARTUP_MESSAGE:
+    .db "Grbl 1.1h ['$' for help]",10,0
