@@ -45,6 +45,23 @@ RESET:
     ; 8 bit, no parity, 1 stop bit
     ldi r16, (1<<UCSZ01)|(1<<UCSZ00)
     sts UCSR0C, r16
+;------------------------------------------
+; INVIO Startup message 
+;------------------------------------------
+    ; Puntatore Z su STARTUP_MESSAGE
+    ldi r30, low(STARTUP_MESSAGE*2)
+    ldi r31, high(STARTUP_MESSAGE*2)
+
+SEND_STARTUP_LOOP:
+    lpm r16, Z+        ; legge byte da FLASH
+    cpi r16, 0
+    breq MAIN_LOOP      ; fine stringa
+WAIT_TX_READY:
+    lds r17, UCSR0A
+    sbrs r17, UDRE0
+    rjmp WAIT_TX_READY
+    sts UDR0, r16
+    rjmp SEND_STARTUP_LOOP
 
 MAIN_LOOP:
     ; Attende byte
@@ -81,12 +98,9 @@ SEND_STATUS_LOOP:
     cpi r16, 0
     breq MAIN_LOOP      ; fine stringa
 WAIT_TX_READY:
-    ;lds r17, UCSR0A
-    ;sbrc r17, UDRE0
-    ;rjmp WAIT_TX_READY
-     sbi 5,5
-    dec r25
-    brne WAIT_TX_READY
+    lds r17, UCSR0A
+    sbrs r17, UDRE0
+    rjmp WAIT_TX_READY
     sts UDR0, r16
     rjmp SEND_STATUS_LOOP
 
@@ -103,7 +117,7 @@ SEND_OK_LOOP:
     breq MAIN_LOOP
 WAIT_TX_OK:
     lds r17, UCSR0A
-    sbrc r17, UDRE0
+    sbrs r17, UDRE0
     rjmp WAIT_TX_OK
     sts UDR0, r16
     rjmp SEND_OK_LOOP
@@ -115,3 +129,5 @@ MSG_STATUS:
     .db "<Idle|MPos:0.000,0.000,0.000|FS:0,0>",10,0
 MSG_OK:
     .db "ok",10,0
+STARTUP_MESSAGE:
+    .db "Grbl 1.1h ['$' for help]",10,0
