@@ -1,117 +1,147 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Arduino LaserGRBL serial protocol</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-        pre { background: #f0f0f0; padding: 10px; border-radius: 5px; }
-        code { color: #c7254e; background: #f9f2f4; padding: 2px 4px; border-radius: 3px; }
-        h2 { color: #2c3e50; }
-    </style>
-    <style>
-        h1 { color: #2c3e50; }
-        .flow { margin-top: 20px; }
-        .node { padding: 10px 20px; border-radius: 5px; margin: 10px auto; width: fit-content; text-align: center; }
-        .serial { background-color: #3498db; color: white; }
-        .check { background-color: #f1c40f; color: black; }
-        .output { background-color: #2ecc71; color: white; }
-        .other { background-color: #e74c3c; color: white; }
-        svg { width: 100%; height: 150px; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fake GRBL Minimal – Explained for Beginners</title>
+<style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; background: #f9f9f9; padding: 20px; }
+    h1, h2, h3 { color: #333; }
+    code { background: #eee; padding: 2px 5px; border-radius: 3px; }
+    pre { background: #eee; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    .important { color: #c00; font-weight: bold; }
+    ul { margin-left: 20px; }
+</style>
 </head>
 <body>
 
-<h1> Arduino code for test LaserGRBL serial protocol</h1>
+<h1>Fake GRBL Minimal – Line by Line Explanation</h1>
 
-<p>This Arduino code simulates a very small part of the GRBL firmware, this code reading commands from Lasergrbl and responding !</p>
+<p>This page explains the AVR ASM code for a minimal "Fake GRBL". We will go line by line, in simple language, for students and beginners.</p>
+
+<h2>1. Program Start</h2>
+<pre>
+.org 0x0000
+rjmp RESET
+</pre>
+<p><strong>Explanation:</strong> This tells the microcontroller to start the program at the label <code>RESET</code>. It's like telling Arduino "begin at setup()".</p>
+
+<h2>2. Setup USART (Serial)</h2>
+<pre>
+.org 0x60
+RESET:
+    ldi r16, 0b00000000
+    sts 0xC5, r16
+    ldi r16, 0b00001000
+    sts 0xC4, r16
+    ldi r16, 0b00011000
+    sts 0xC1, r16
+    ldi r16, 0b00000110
+    sts 0xC2, r16
+</pre>
+<p><strong>Explanation:</strong> This initializes the serial port:</p>
 <ul>
-    <li>LserGRBL send <code>?</code> → this code returns this status.<code> Idle|MPos:0.000,0.000,0.000|FS:0,0</code></li>
-    <li>Any other command ending with <code>Serial.println</code> → returns <code>ok</code>.</li>
+<li><code>0xC5</code> and <code>0xC4</code> set the baud rate (speed 115200).</li>
+<li><code>0xC1</code> enables RX (receive) and TX (transmit).</li>
+<li><code>0xC2</code> sets 8 data bits, no parity, 1 stop bit.</li>
+<li>Equivalent Arduino: <code>Serial.begin(115200);</code></li>
 </ul>
 
-<h2>Code</h2>
-<pre><code>void setup() {
-  Serial.begin(115200);
-  delay(100);
-  Serial.println("Grbl 1.1h ['$' for help]");
-}
+<h2>3. Main Loop</h2>
+<pre>
+MAIN_LOOP:
+WAIT_RX:
+    lds r16, 0xC0
+    sbrc r16, 7
+    rjmp GOT_RX
+    rjmp WAIT_RX
 
-void loop() {
-  if (Serial.available()) {
-      char c = Serial.read();
-      if (c == '?') {
-          Serial.println("&lt;Idle|MPos:0.000,0.000,0.000|FS:0,0&gt;");
-          return;  // immediately exit the loop() function
-      } else {
-          String cmd = Serial.readStringUntil('\n');
-          cmd.trim();
-          if (cmd.length() > 0) Serial.println("ok");
-      }
-  }
-}
-</code></pre>
-
-<h2>Step-by-step Explanation</h2>
-
-<h3>1. setup()</h3>
+GOT_RX:
+    lds r16, 0xC6
+</pre>
+<p><strong>Explanation:</strong> This waits for a byte from the host:</p>
 <ul>
-    <li><code>Serial.begin(115200);</code> → initializes the serial communication at 115200 baud.</li>
-    <li><code>delay(100);</code> → small pause to ensure the serial interface is ready.</li>
-    <li><code>Serial.println("Grbl 1.1h ['$' for help]");</code> → sends the welcome string to the host software (LaserGRBL, for example).</li>
+<li>Check if a byte is available (<code>RXC0</code> bit in <code>UCSR0A</code>).</li>
+<li>If no byte, it loops until one arrives.</li>
+<li>Once a byte arrives, we read it from <code>UDR0</code> into <code>r16</code>.</li>
+<li>Equivalent Arduino: <code>while(!Serial.available()); r16 = Serial.read();</code></li>
 </ul>
 
-<h3>2. loop()</h3>
-<p>The loop checks whether any data is available on the serial port:</p>
-
-<ol>
-    <li><code>if (Serial.available())</code> → checks whether the serial buffer contains at least one byte.</li>
-    <li><code>char c = Serial.read();</code> → reads a single character and removes it from the buffer.</li>
-    <li>
-        <code>if (c == '?')</code> → if the character is <code>?</code>, it responds with the machine status:
-        <pre><code>&lt;Idle|MPos:0.000,0.000,0.000|FS:0,0&gt;</code></pre>
-        <ul>
-            <li><code>return;</code> → immediately leaves <code>loop()</code>, preventing the <code>else</code> branch from running.</li>
-        </ul>
-    </li>
-    <li>
-        <code>else</code> → if the character is *not* <code>?</code>:
-        <ul>
-            <li><code>String cmd = Serial.readStringUntil('\n');</code> → reads the rest of the line until a newline appears.</li>
-            <li><code>cmd.trim();</code> → removes spaces or invisible characters at both ends.</li>
-            <li><code>if (cmd.length() &gt; 0) Serial.println("ok");</code> → if the command is valid, send <code>ok</code> back to the host.</li>
-        </ul>
-    </li>
-</ol>
-
-<h3>3. Final Behavior</h3>
+<h2>4. Check the Byte</h2>
+<pre>
+cpi r16, 0x0A
+breq SEND_OK
+cpi r16, '?'
+breq SEND_STATUS
+rjmp SEND_OK
+</pre>
+<p><strong>Explanation:</strong> This checks what the byte is:</p>
 <ul>
-    <li>LaserGRBL sending <code>?</code> → and grbl need send the status immediately.</li>
-    <li>LaserGRBL send G-code (e.g., <code>G0 X10 Y10</code>) → grbl receives code and rispond <code>ok</code>.</li>
-    <li>No <code>\n</code> is required after <code>?</code> because the code reads only that single character.</li>
+<li>If it's <code>0x0A</code> (newline, '\n'), send "ok".</li>
+<li>If it's <code>?</code>, send the status string.</li>
+<li>If it's anything else, send "ok" anyway (for compatibility).</li>
 </ul>
 
-<h1>Mini-GRBL – Serial Flow</h1>
-<p>Interactive animation showing how the Arduino code handles the serial input for <code>?</code> and other commands.</p>
+<h2>5. Sending a String</h2>
+<pre>
+SEND_OK:
+    ldi r30, low(MSG_OK*2)
+    ldi r31, high(MSG_OK*2)
 
-<div class="flow">
-    <div id="serial" class="node serial">Serial Buffer: "?" or another command</div>
-    <svg>
-        <line id="line1" x1="50%" y1="0" x2="50%" y2="50" stroke="black" stroke-width="2"/>
-    </svg>
-    <div id="check" class="node check">Read char: c = Serial.read()</div>
-    <svg>
-        <line id="line2" x1="50%" y1="0" x2="50%" y2="50" stroke="black" stroke-width="2"/>
-    </svg>
-    <div id="decision" class="node check">c == '?' ?</div>
-    <svg>
-        <line x1="50%" y1="0" x2="30%" y2="50" stroke="black" stroke-width="2"/>
-        <line x1="50%" y1="0" x2="70%" y2="50" stroke="black" stroke-width="2"/>
-    </svg>
-    <div id="outputYes" class="node output" style="float:left; margin-left:20px;">Status sent:<br>&lt;Idle|MPos:0,0,0|FS:0,0&gt;</div>
-    <div id="outputNo" class="node other" style="float:right; margin-right:20px;">Read line until '\n'<br>Trim and if cmd.length > 0 → "ok"</div>
-</div>
+SEND_OK_LOOP:
+    lpm r16, Z+
+    cpi r16, 0
+    breq MAIN_LOOP
+WAIT_TX_OK:
+    lds r17, 0xC0
+    sbrs r17, 5
+    rjmp WAIT_TX_OK
+    sts 0xC6, r16
+    rjmp SEND_OK_LOOP
+</pre>
+<p><strong>Explanation:</strong></p>
+<ul>
+<li><code>MSG_OK</code> points to "ok\n" in flash memory.</li>
+<li>The loop reads one byte at a time (<code>lpm</code>) until it reaches <code>0</code> (string terminator).</li>
+<li>Before writing to <code>UDR0</code>, it waits until the transmit buffer is ready (<code>UDRE0</code> bit).</li>
+<li>Equivalent Arduino: <code>Serial.println("ok");</code></li>
+</ul>
 
+<h2>6. Status String</h2>
+<pre>
+SEND_STATUS:
+    ldi r30, low(MSG_STATUS*2)
+    ldi r31, high(MSG_STATUS*2)
+    rcall SEND_STRING
+</pre>
+<p><strong>Explanation:</strong> Same as "ok", but sends the status string to the host.</p>
+
+<h2>7. Strings in Flash</h2>
+<pre>
+MSG_OK:
+    .db "ok",10,0
+
+MSG_STATUS:
+    .db "&lt;Idle|MPos:0.000,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000&gt;",10,0
+</pre>
+<p><strong>Explanation:</strong></p>
+<ul>
+<li>Every string ends with <code>0</code> → tells AVR where the string ends.</li>
+<li><code>10</code> → ASCII <code>\n</code>, tells host that line ended.</li>
+<li>This is why the host responds "ok" correctly when you press arrow keys in LaserGRBL.</li>
+</ul>
+
+<h2>8. Why This Matters</h2>
+<p class="important">Most beginners forget <code>\n</code> or <code>0</code> terminators. The microcontroller then keeps sending garbage, or the host never replies. Studying this ASM code teaches you how serial communication works byte-by-byte, including waiting for buffer, reading flash, and sending bytes.</p>
+
+<h2>9. Summary</h2>
+<ul>
+<li>Every string must end with <code>0</code> (terminator).</li>
+<li>Every host command often expects <code>\n</code> to process the line.</li>
+<li>Low-level AVR teaches you what Arduino hides.</li>
+<li>By following this step-by-step code, you understand exactly what happens under <code>Serial.println()</code>.</li>
+</ul>
 
 </body>
 </html>
+
