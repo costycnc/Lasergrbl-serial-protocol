@@ -1,0 +1,101 @@
+;------------------------------------------
+; Fake GRBL Minimal – Arduino Nano / ATmega328P
+; Complete mapping of Arduino sketch to AVR ASM
+; Every Arduino line is commented for reference
+;------------------------------------------
+
+.org 0x0000
+rjmp RESET                                      ; jump to RESET (start of setup/loop)
+
+.org 0x60
+RESET:
+    ; Arduino: void setup() { Serial.begin(115200); }
+    ldi r16, 0b00000000                         ; UBRR0H = 0
+    sts 0xC5, r16                               ; UBRR0H @0xC5
+    ldi r16, 0b00001000                         ; UBRR0L = 8
+    sts 0xC4, r16                               ; UBRR0L @0xC4
+    ldi r16, 0b00011000                         ; RXEN0(bit4)+TXEN0(bit3)
+    sts 0xC1, r16                               ; UCSR0B
+    ldi r16, 0b00000110                         ; UCSZ01(bit2)+UCSZ00(bit1)
+    sts 0xC2, r16                               ; UCSR0C
+
+MAIN_LOOP:
+    ; Arduino: void loop() {}
+WAIT_RX:
+    ; Arduino: while (Serial.available())
+    lds r16, 0xC0                               ; read UCSR0A
+    sbrc r16, 7                                 ; RXC0 bit set?
+    rjmp GOT_RX
+    rjmp WAIT_RX
+
+GOT_RX:
+    ; Arduino: Serial.read()
+    lds r16, 0xC6                               ; read UDR0
+
+    ; Arduino: switch(Serial.read()) {
+    cpi r16, 0x0A                               ; case '\n':
+    breq SEND_OK
+    cpi r16, '?'                                ; case '?':
+    breq SEND_STATUS
+    ; Arduino: default: do nothing (ignored)
+    rjmp SEND_OK                                ; reply "ok" anyway for compatibility
+
+;------------------------------------------
+; SEND OK
+;------------------------------------------
+SEND_OK:
+    ; Arduino: Serial.println("ok");
+    ldi r30, low(MSG_OK*2)
+    ldi r31, high(MSG_OK*2)
+
+SEND_OK_LOOP:
+    lpm r16, Z+                                 ; read byte from flash
+    cpi r16, 0
+    breq MAIN_LOOP                              ; end of string
+WAIT_TX_OK:
+    lds r17, 0xC0                               ; check UCSR0A
+    sbrs r17, 5                                 ; wait UDRE0
+    rjmp WAIT_TX_OK
+    sts 0xC6, r16                               ; write byte to UDR0
+    rjmp SEND_OK_LOOP
+
+;------------------------------------------
+; SEND STATUS
+;------------------------------------------
+SEND_STATUS:
+    ; Arduino: Serial.println("<Idle|MPos:0.000,...>");
+    ldi r30, low(MSG_STATUS*2)
+    ldi r31, high(MSG_STATUS*2)
+
+SEND_STATUS_LOOP:
+    lpm r16, Z+
+    cpi r16, 0
+    breq MAIN_LOOP
+WAIT_TX_STATUS:
+    lds r17, 0xC0                               ; check UCSR0A
+    sbrs r17, 5                                 ; wait UDRE0
+    rjmp WAIT_TX_STATUS
+    sts 0xC6, r16                               ; write byte to UDR0
+    rjmp SEND_STATUS_LOOP
+
+;------------------------------------------
+; Optional delay (simulate Arduino delay(5))
+;------------------------------------------
+; Can be implemented with a small loop if desired
+; delay_5ms:
+;   ldi r18, 250
+;   ldi r19, 20
+; delay_loop:
+;   dec r19
+;   brne delay_loop
+;   dec r18
+;   brne delay_loop
+;   ret
+
+;------------------------------------------
+; STRINGS IN FLASH
+;------------------------------------------
+MSG_OK:
+    .db "ok",10,0                                ; Arduino: Serial.println("ok")
+MSG_STATUS:
+    .db "<Idle|MPos:0.000,0.000,0.000|FS:0,0|WCO:0.000,0.000,0.000>",10,0  ; Arduino: Serial.println("<Idle|MPos:…>")
